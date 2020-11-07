@@ -50,7 +50,7 @@ def run_provisioning():
             provisioner.get_official_certs()
 
     except IOError:
-        print("### Bootstrap cert non-existent. Official cert may already be in place.")
+        print("### Bootstrap cert non-existent.")
 
 
 if __name__ == "__main__":
