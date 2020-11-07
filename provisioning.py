@@ -14,9 +14,8 @@
 # 	   3) The process instatiates a handler that uses the bootstrap certificate to connect to IoTCore.
 #	   4) The connection only enables calls to the Foundry provisioning services, where a new certificate is requested.
 #      5) The certificate is assembled from the response payload, and a foundry service call is made to activate the certificate.
-#	   6) The provisioning template executes the instructions provided and the process rotates to the new certificate.
-#      7) Using the new certificate, a pub/sub call is demonstrated on a previously forbidden topic to test the new certificate.
-#      8) New certificates are saved locally, and can be stored/consumed as the application deems necessary.
+#	   6) The provisioning template executes the instructions provided.
+#      7) New certificates are saved locally, and can be stored/consumed as the application deems necessary.
 #
 #
 # ------------------------------------------------------------------------------
