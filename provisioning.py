@@ -44,9 +44,7 @@ def run_provisioning():
     try:
         with open("{}/{}".format(secure_cert_path, bootstrap_cert)) as f:
             # Call super-method to perform aquisition/activation
-            # of certs, creation of thing, etc. Returns general
-            # purpose callback at this point.
-            # Instantiate provisioning handler, pass in path to config
+            # of certs, creation of thing, etc.
             provisioner.get_official_certs()
 
     except IOError:
