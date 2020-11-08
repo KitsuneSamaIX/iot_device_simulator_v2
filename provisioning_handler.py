@@ -38,7 +38,7 @@ class ProvisioningHandler:
         self.secure_key = self.config_parameters['SECURE_KEY']
         self.root_cert = self.config_parameters['ROOT_CERT']
     
-        # Sample Provisioning Template requests a serial number as a 
+        # Provisioning Template requests a serial number as a
         # seed to generate Thing names in IoTCore. Simulating here.
         #self.unique_id = str(int(round(time.time() * 1000)))
         # self.unique_id = "1234567-abcde-fghij-klmno-1234567abc-TLS350"
@@ -57,9 +57,7 @@ class ProvisioningHandler:
         # ------------------------------------------------------------------------------
 
         self.primary_MQTTClient = None
-        self.test_MQTTClient = None
         self.workflow_completed = False
-        self.message_payload = {}
 
     def core_connect(self):
         """ Method used to connect to connect to AWS IoTCore Service. Endpoint collected from config.
@@ -96,36 +94,23 @@ class ProvisioningHandler:
     def on_connection_resumed(self, connection, return_code, session_present, **kwargs):
         print('connection resumed with return code {}, session present {}'.format(return_code, session_present))
 
-    def get_current_certs(self):
-        non_bootstrap_certs = glob.glob('{}/[!boot]*.crt'.format(self.secure_cert_path))
-        non_bootstrap_key = glob.glob('{}/[!boot]*.key'.format(self.secure_cert_path))
-
-        #Get the current cert
-        if len(non_bootstrap_certs) > 0:
-            self.claim_cert = os.path.basename(non_bootstrap_certs[0])
-
-        #Get the current key
-        if len(non_bootstrap_key) > 0:
-            self.secure_key = os.path.basename(non_bootstrap_key[0])
-
-    def enable_error_monitor(self):
-        """ Subscribe to pertinent IoTCore topics that would emit errors
+    def enable_response_monitor(self):
+        """ Subscribe to pertinent IoTCore topics
         """
-
-        template_reject_topic = "$aws/provisioning-templates/{}/provision/json/rejected".format(self.template_name)
-        certificate_reject_topic = "$aws/certificates/create/json/rejected"
+        template_rejected_topic = "$aws/provisioning-templates/{}/provision/json/rejected".format(self.template_name)
+        certificate_rejected_topic = "$aws/certificates/create/json/rejected"
         
         template_accepted_topic = "$aws/provisioning-templates/{}/provision/json/accepted".format(self.template_name)
         certificate_accepted_topic = "$aws/certificates/create/json/accepted"
 
-        subscribe_topics = [template_reject_topic, certificate_reject_topic, template_accepted_topic, certificate_accepted_topic]
+        subscribe_topics = [template_rejected_topic, certificate_rejected_topic, template_accepted_topic, certificate_accepted_topic]
 
         for mqtt_topic in subscribe_topics:
             print("Subscribing to topic '{}'...".format(mqtt_topic))
             mqtt_topic_subscribe_future, _ = self.primary_MQTTClient.subscribe(
                 topic=mqtt_topic,
                 qos=mqtt.QoS.AT_LEAST_ONCE,
-                callback=self.basic_callback)
+                callback=self.on_message_callback)
 
             # Wait for subscription to succeed
             mqtt_topic_subscribe_result = mqtt_topic_subscribe_future.result()
@@ -144,8 +129,8 @@ class ProvisioningHandler:
         # Connect to core with provision claim creds
         self.core_connect()
 
-        # Monitor topics for errors
-        self.enable_error_monitor()
+        # Monitor response topics
+        self.enable_response_monitor()
 
         # Make a publish call to topic to get official certs
         self.primary_MQTTClient.publish(
@@ -154,39 +139,47 @@ class ProvisioningHandler:
             qos=mqtt.QoS.AT_LEAST_ONCE)
         time.sleep(1)
 
-        # Wait the function return until all callbacks have returned
-        # Returned denoted when callback flag is set in this class.
+        # Wait until the workflow is completed
         while not self.workflow_completed:
             await asyncio.sleep(0)
 
-    def on_message_callback(self, payload):
+    def on_message_callback(self, topic, payload, **kwargs):
         """ Callback Message handler responsible for workflow routing of msg responses from provisioning services.
         
         Arguments:
             payload {bytes} -- The response message payload.
         """
-        json_data = json.loads(payload)
-        
-        # A response has been recieved from the service that contains certificate data. 
-        if 'certificateId' in json_data:
-            self.logger.info('##### SUCCESS. SAVING KEYS TO DEVICE! #####')
-            print('##### SUCCESS. SAVING KEYS TO DEVICE! #####')
-            self.assemble_certificates(json_data)
-        
-        # A response contains acknowledgement that the provisioning template has been acted upon.
-        elif 'deviceConfiguration' in json_data:
-            self.logger.info('##### CERT ACTIVATED AND THING {} CREATED #####'.format(json_data['thingName']))
-            print('##### CERT ACTIVATED AND THING {} CREATED #####'.format(json_data['thingName']))
-            with open('provisioned_thing.json', 'w') as f:
-                json.dump(json_data, f)
+        print("Received message from topic '{}': {}".format(topic, payload))
 
-            print("##### ACTIVATED CREDENTIALS ({}, {}). #####".format(self.new_key_name, self.new_cert_name))
-            print("##### CERT FILES SAVED TO {} #####".format(self.secure_cert_path))
-
+        # Check if a request is rejected
+        if (topic == "$aws/provisioning-templates/{}/provision/json/rejected".format(self.template_name) or
+                topic == "$aws/certificates/create/json/rejected"):
+            print("Failed provisioning")
             self.workflow_completed = True
 
         else:
-            self.logger.info(json_data)
+            json_data = json.loads(payload)
+
+            # A response has been recieved from the service that contains certificate data.
+            if 'certificateId' in json_data:
+                self.logger.info('##### SUCCESS. SAVING KEYS TO DEVICE! #####')
+                print('##### SUCCESS. SAVING KEYS TO DEVICE! #####')
+                self.assemble_certificates(json_data)
+
+            # A response contains acknowledgement that the provisioning template has been acted upon.
+            elif 'deviceConfiguration' in json_data:
+                self.logger.info('##### CERT ACTIVATED AND THING {} CREATED #####'.format(json_data['thingName']))
+                print('##### CERT ACTIVATED AND THING {} CREATED #####'.format(json_data['thingName']))
+                with open('provisioned_thing.json', 'w') as f:
+                    json.dump(json_data, f)
+
+                print("##### ACTIVATED CREDENTIALS ({}, {}). #####".format(self.new_key_name, self.new_cert_name))
+                print("##### CERT FILES SAVED TO {} #####".format(self.secure_cert_path))
+
+                self.workflow_completed = True
+
+            else:
+                self.logger.info(json_data)
 
     def assemble_certificates(self, payload):
         """ Method takes the payload and constructs/saves the certificate and private key. Method uses
@@ -242,13 +235,3 @@ class ProvisioningHandler:
             payload=json.dumps(register_template),
             qos=mqtt.QoS.AT_LEAST_ONCE)
         time.sleep(2)
-
-    def basic_callback(self, topic, payload, **kwargs):
-        print("Received message from topic '{}': {}".format(topic, payload))
-        self.message_payload = payload
-        self.on_message_callback(payload)
-
-        if (topic == "$aws/provisioning-templates/{}/provision/json/rejected".format(self.template_name) or
-                topic == "$aws/certificates/create/json/rejected"):
-            print("Failed provisioning")
-            self.workflow_completed = True

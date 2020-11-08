@@ -13,11 +13,6 @@ from awsiot import mqtt_connection_builder
 
 
 if __name__ == '__main__':
-    # set shadow to default values (for testing)
-    with open('./shadow_defaults.json', 'r') as shadow_defaults:
-        with open('./shadow.json', 'w') as shadow:
-            shadow.write(shadow_defaults.read())
-
     # set config path
     CONFIG_PATH = 'config.ini'
 
@@ -91,7 +86,7 @@ if __name__ == '__main__':
     # simulate device working
     with ThreadPoolExecutor(max_workers=5) as executor:
         print("Keeping shadow in sync...")
-        executor.submit(shadow_handler, iot_endpoint, cert_path, key_path, root_ca_path, thing_name, thing_name, mqtt_connection)
+        executor.submit(shadow_handler, iot_endpoint, cert_path, key_path, root_ca_path, thing_name, mqtt_session=mqtt_connection)
 
         print("Publishing simulated device logs...")
-        executor.submit(publish_device_logs, iot_endpoint, cert_path, key_path, root_ca_path, thing_name, thing_name, mqtt_connection)
+        executor.submit(publish_device_logs, iot_endpoint, cert_path, key_path, root_ca_path, thing_name, mqtt_session=mqtt_connection)

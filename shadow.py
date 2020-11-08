@@ -9,27 +9,9 @@ import traceback
 from uuid import uuid4
 import json
 
-# - Overview -
-# This sample uses the AWS IoT Device Shadow Service to keep a property in
-# sync between device and server. Imagine a light whose color may be changed
-# through an app, or set by a local user.
-#
-# - Instructions -
-# Once connected, type a value in the terminal and press Enter to update
-# the property's "reported" value. The sample also responds when the "desired"
-# value changes on the server. To observe this, edit the Shadow document in
-# the AWS Console and set a new "desired" value.
-#
-# - Detail -
-# On startup, the sample requests the shadow document to learn the property's
-# initial state. The sample also subscribes to "delta" events from the server,
-# which are sent when a property's "desired" value differs from its "reported"
-# value. When the sample learns of a new desired value, that value is changed
-# on the device and an update is sent to the server with the new "reported"
-# value.
 
-
-parser = argparse.ArgumentParser(description="Device Shadow sample keeps a property in sync across client and server")
+parser = argparse.ArgumentParser(description="Keeps Device Shadow in sync across client and server and allows the user"
+                                             "to change the value of a test property")
 parser.add_argument('--endpoint', required=True, help="Your AWS IoT custom endpoint, not including a port. " +
                                                       "Ex: \"w6zbse3vjd5b4p-ats.iot.us-west-2.amazonaws.com\"")
 parser.add_argument('--cert',  help="File path to your client certificate, in PEM format")
@@ -41,8 +23,8 @@ parser.add_argument('--client-id', default="test-" + str(uuid4()), help="Client 
 parser.add_argument('--thing-name', required=True, help="The name assigned to your IoT Thing")
 
 
-# Using globals to simplify sample code
-is_sample_done = threading.Event()
+# Using globals to simplify code
+is_done = threading.Event()
 
 mqtt_connection = None
 shadow_client = None
@@ -62,13 +44,13 @@ class LockedData:
 locked_data = LockedData()
 
 
-# Function for gracefully quitting this sample
+# Function for gracefully quitting the program
 def exit(msg_or_exception):
     if isinstance(msg_or_exception, Exception):
-        print("Exiting sample due to exception.")
+        print("Exiting due to exception.")
         traceback.print_exception(msg_or_exception.__class__, msg_or_exception, sys.exc_info()[2])
     else:
-        print("Exiting sample:", msg_or_exception)
+        print("Exiting:", msg_or_exception)
 
     with locked_data.lock:
         if not locked_data.disconnect_called:
@@ -82,8 +64,8 @@ def on_disconnected(disconnect_future):
     # type: (Future) -> None
     print("Disconnected.")
 
-    # Signal that sample is finished
-    is_sample_done.set()
+    # Signal that procedure is finished
+    is_done.set()
 
 
 def on_get_shadow_accepted(response):
@@ -213,7 +195,7 @@ def user_input_thread_fn():
             # Read user input
             new_value = input()
 
-            # If user wants to quit sample, then quit.
+            # If user wants to quit, then quit.
             # Otherwise change the shadow value.
             if new_value in ['exit', 'quit']:
                 exit("User has quit")
@@ -228,7 +210,7 @@ def user_input_thread_fn():
 
 
 def shadow_handler(endpoint, cert, key, root_ca, thing_name_param, client_id=str(uuid4()), mqtt_session=None):
-    # Using globals to simplify sample code
+    # Using globals to simplify code
     global mqtt_connection, shadow_client, thing_name
     thing_name = thing_name_param
 
@@ -257,7 +239,7 @@ def shadow_handler(endpoint, cert, key, root_ca, thing_name_param, client_id=str
         # Wait for connection to be fully established.
         # Note that it's not necessary to wait, commands issued to the
         # mqtt_connection before its fully connected will simply be queued.
-        # But this sample waits here so it's obvious when a connection
+        # But this function waits here so it's obvious when a connection
         # fails or succeeds.
         connected_future.result()
         print("Connected!")
@@ -309,7 +291,7 @@ def shadow_handler(endpoint, cert, key, root_ca, thing_name_param, client_id=str
         get_accepted_subscribed_future.result()
         get_rejected_subscribed_future.result()
 
-        # The rest of the sample runs asyncronously.
+        # The rest of the program runs asyncronously.
 
         # Issue request for shadow's current state.
         # The response will be received by the on_get_accepted() callback
@@ -331,8 +313,8 @@ def shadow_handler(endpoint, cert, key, root_ca, thing_name_param, client_id=str
     except Exception as e:
         exit(e)
 
-    # Wait for the sample to finish (user types 'quit', or an error occurs)
-    is_sample_done.wait()
+    # Wait for the finish (user types 'quit', or an error occurs)
+    is_done.wait()
 
 
 if __name__ == '__main__':
