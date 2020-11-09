@@ -186,7 +186,7 @@ class ProvisioningHandler:
         existing AWS IoT Core naming convention.
         
         Arguments:
-            payload {string} -- Certifiable certificate/key data.
+            payload {dict} -- Certificate data (as strings).
 
         Returns:
             ownership_token {string} -- proof of ownership from certificate issuance activity.
