@@ -3,6 +3,7 @@ from glob import glob
 from uuid import uuid4
 import json
 from concurrent.futures import ThreadPoolExecutor
+import threading
 
 from provisioning import run_provisioning
 from shadow import shadow_handler
@@ -83,10 +84,22 @@ if __name__ == '__main__':
     connect_future.result()
     print("Connected!")
 
+    # event used to quit the execution
+    is_done = threading.Event()
+
     # simulate device working
     with ThreadPoolExecutor(max_workers=5) as executor:
         print("Keeping shadow in sync...")
-        executor.submit(shadow_handler, iot_endpoint, cert_path, key_path, root_ca_path, thing_name, mqtt_session=mqtt_connection)
+        executor.submit(shadow_handler, iot_endpoint, cert_path, key_path, root_ca_path, thing_name, mqtt_session=mqtt_connection, is_done_event=is_done)
 
         print("Publishing simulated device logs...")
-        executor.submit(publish_device_logs, iot_endpoint, cert_path, key_path, root_ca_path, thing_name, mqtt_session=mqtt_connection)
+        executor.submit(publish_device_logs, iot_endpoint, cert_path, key_path, root_ca_path, thing_name, mqtt_session=mqtt_connection, is_done_event=is_done)
+
+    # wait until required to quit
+    is_done.wait()
+
+    # disconnect
+    print("Disconnecting...")
+    disconnect_future = mqtt_connection.disconnect()
+    disconnect_future.result()
+    print("Disconnected!")

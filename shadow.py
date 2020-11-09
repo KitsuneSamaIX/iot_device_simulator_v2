@@ -19,16 +19,15 @@ parser.add_argument('--key', help="File path to your private key file, in PEM fo
 parser.add_argument('--root-ca', help="File path to root certificate authority, in PEM format. " +
                                       "Necessary if MQTT server uses a certificate that's not already in " +
                                       "your trust store")
-parser.add_argument('--client-id', default="test-" + str(uuid4()), help="Client ID for MQTT connection.")
 parser.add_argument('--thing-name', required=True, help="The name assigned to your IoT Thing")
 
 
 # Using globals to simplify code
-is_done = threading.Event()
-
 mqtt_connection = None
+mqtt_connection_is_external = False
 shadow_client = None
-thing_name = ""
+thing_name = None
+is_done = None
 
 with open('shadow_defaults.json', 'r') as f:
     SHADOW_VALUE_DEFAULT = json.load(f)
@@ -38,7 +37,6 @@ class LockedData:
     def __init__(self):
         self.lock = threading.Lock()
         self.shadow_value = None
-        self.disconnect_called = False
 
 
 locked_data = LockedData()
@@ -52,16 +50,15 @@ def exit(msg_or_exception):
     else:
         print("Exiting:", msg_or_exception)
 
-    with locked_data.lock:
-        if not locked_data.disconnect_called:
-            print("Disconnecting...")
-            locked_data.disconnect_called = True
-            future = mqtt_connection.disconnect()
-            future.add_done_callback(on_disconnected)
+    if not mqtt_connection_is_external:
+        print("Disconnecting...")
+        future = mqtt_connection.disconnect()
+        future.add_done_callback(on_disconnected)
+    else:
+        is_done.set()
 
 
-def on_disconnected(disconnect_future):
-    # type: (Future) -> None
+def on_disconnected():
     print("Disconnected.")
 
     # Signal that procedure is finished
@@ -209,16 +206,19 @@ def user_input_thread_fn():
             break
 
 
-def shadow_handler(endpoint, cert, key, root_ca, thing_name_param, client_id=str(uuid4()), mqtt_session=None):
+def shadow_handler(endpoint, cert, key, root_ca, thing_name_param, mqtt_session=None, is_done_event=threading.Event()):
     # Using globals to simplify code
-    global mqtt_connection, shadow_client, thing_name
+    global mqtt_connection, mqtt_connection_is_external, shadow_client, thing_name, is_done
     thing_name = thing_name_param
+    is_done = is_done_event
 
     if mqtt_session is None:
         # Spin up resources
         event_loop_group = io.EventLoopGroup(1)
         host_resolver = io.DefaultHostResolver(event_loop_group)
         client_bootstrap = io.ClientBootstrap(event_loop_group, host_resolver)
+
+        client_id = str(uuid4())
 
         mqtt_connection = mqtt_connection_builder.mtls_from_path(
             endpoint=endpoint,
@@ -246,6 +246,7 @@ def shadow_handler(endpoint, cert, key, root_ca, thing_name_param, client_id=str
 
     else:
         mqtt_connection = mqtt_session
+        mqtt_connection_is_external = True
         shadow_client = iotshadow.IotShadowClient(mqtt_connection)
 
     try:

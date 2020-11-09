@@ -34,11 +34,6 @@ parser.add_argument('--root-ca', required=True, help="File path to root certific
 
 parser.add_argument('--thing-name', required=True, help="The name assigned to your IoT Thing")
 
-parser.add_argument('--client-id', default=str(uuid4()), help="Client ID for MQTT connection.")
-
-parser.add_argument('--verbosity', choices=[x.name for x in io.LogLevel], default=io.LogLevel.NoLogs.name,
-                    help='Logging level')
-
 
 # callback when connection is accidentally lost
 def on_connection_interrupted(connection, error, **kwargs):
@@ -72,7 +67,7 @@ def on_message_received(topic, payload, **kwargs):
     print("Received message from topic '{}': {}".format(topic, payload))
 
 
-def publish_device_logs(endpoint, cert, key, root_ca, thing_name, client_id=str(uuid4()), mqtt_session=None):
+def publish_device_logs(endpoint, cert, key, root_ca, thing_name, mqtt_session=None, is_done_event=threading.Event()):
     """Publish simulated device logs to thing's log topic
 
     :param endpoint: Your AWS IoT custom endpoint, not including a port.
@@ -80,10 +75,13 @@ def publish_device_logs(endpoint, cert, key, root_ca, thing_name, client_id=str(
     :param key: File path to your private key file, in PEM format.
     :param root_ca: File path to root certificate authority, in PEM format.
     :param thing_name: The name assigned to your IoT Thing.
-    :param client_id: Client ID for MQTT connection.
     :param mqtt_session: Existing mqtt session.
+    :param is_done_event: Threading Event to stop execution.
     :return: None
     """
+
+    is_done = is_done_event
+    mqtt_connection_is_external = False
 
     # thing's log topic
     log_topic = 'iot/things/' + thing_name + '/logs'
@@ -93,6 +91,8 @@ def publish_device_logs(endpoint, cert, key, root_ca, thing_name, client_id=str(
         event_loop_group = io.EventLoopGroup(1)
         host_resolver = io.DefaultHostResolver(event_loop_group)
         client_bootstrap = io.ClientBootstrap(event_loop_group, host_resolver)
+
+        client_id = str(uuid4()),
 
         # set mqtt connection parameters
         mqtt_connection = mqtt_connection_builder.mtls_from_path(
@@ -118,6 +118,7 @@ def publish_device_logs(endpoint, cert, key, root_ca, thing_name, client_id=str(
 
     else:
         mqtt_connection = mqtt_session
+        mqtt_connection_is_external = True
 
     # subscribe to the thing's logs topic
     print("Subscribing to topic '{}'...".format(log_topic))
@@ -139,6 +140,11 @@ def publish_device_logs(endpoint, cert, key, root_ca, thing_name, client_id=str(
         pub_count = 1
 
         while True:
+            # check quit condition
+            if is_done.is_set():
+                break
+
+            # publish simulated log
             log_data["test_attribute"] = str(uuid4())
             log_data["publish_count"] = pub_count
             message = json.dumps(log_data)
@@ -153,11 +159,12 @@ def publish_device_logs(endpoint, cert, key, root_ca, thing_name, client_id=str(
             sleep(pub_delay)
             pub_count += 1
 
-    # disconnect
-    print("Disconnecting...")
-    disconnect_future = mqtt_connection.disconnect()
-    disconnect_future.result()
-    print("Disconnected!")
+    # if mqtt connection was created here then disconnect it
+    if not mqtt_connection_is_external:
+        print("Disconnecting...")
+        disconnect_future = mqtt_connection.disconnect()
+        disconnect_future.result()
+        print("Disconnected!")
 
 
 if __name__ == '__main__':
