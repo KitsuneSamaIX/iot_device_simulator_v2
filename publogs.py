@@ -67,7 +67,7 @@ def on_message_received(topic, payload, **kwargs):
     print("Received message from topic '{}': {}".format(topic, payload))
 
 
-def publish_device_logs(endpoint, cert, key, root_ca, thing_name, mqtt_session=None, is_done_event=threading.Event()):
+def publish_device_logs(thing_name, endpoint=None, cert=None, key=None, root_ca=None, mqtt_session=None, is_done_event=threading.Event()):
     """Publish simulated device logs to thing's log topic
 
     :param endpoint: Your AWS IoT custom endpoint, not including a port.
@@ -169,4 +169,4 @@ def publish_device_logs(endpoint, cert, key, root_ca, thing_name, mqtt_session=N
 
 if __name__ == '__main__':
     args = parser.parse_args()
-    publish_device_logs(args.endpoint, args.cert, args.key, args.root_ca, args.thing_name)
+    publish_device_logs(args.thing_name, args.endpoint, args.cert, args.key, args.root_ca)

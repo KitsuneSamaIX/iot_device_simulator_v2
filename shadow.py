@@ -206,7 +206,7 @@ def user_input_thread_fn():
             break
 
 
-def shadow_handler(endpoint, cert, key, root_ca, thing_name_param, mqtt_session=None, is_done_event=threading.Event()):
+def shadow_handler(thing_name_param, endpoint=None, cert=None, key=None, root_ca=None, mqtt_session=None, is_done_event=threading.Event()):
     # Using globals to simplify code
     global mqtt_connection, mqtt_connection_is_external, shadow_client, thing_name, is_done
     thing_name = thing_name_param
@@ -320,4 +320,4 @@ def shadow_handler(endpoint, cert, key, root_ca, thing_name_param, mqtt_session=
 
 if __name__ == '__main__':
     args = parser.parse_args()
-    shadow_handler(args.endpoint, args.cert, args.key, args.root_ca, args.thing_name)
+    shadow_handler(args.thing_name, args.endpoint, args.cert, args.key, args.root_ca)
