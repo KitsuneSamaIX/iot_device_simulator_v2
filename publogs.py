@@ -67,14 +67,15 @@ def on_message_received(topic, payload, **kwargs):
     print("Received message from topic '{}': {}".format(topic, payload))
 
 
-def publish_device_logs(thing_name, endpoint=None, cert=None, key=None, root_ca=None, mqtt_session=None, is_done_event=threading.Event()):
+def publish_device_logs(thing_name, pub_delay=10, endpoint=None, cert=None, key=None, root_ca=None, mqtt_session=None, is_done_event=threading.Event()):
     """Publish simulated device logs to thing's log topic
 
+    :param thing_name: The name assigned to your IoT Thing.
+    :param pub_delay: The log publishing delay in seconds.
     :param endpoint: Your AWS IoT custom endpoint, not including a port.
     :param cert: File path to your client certificate, in PEM format.
     :param key: File path to your private key file, in PEM format.
     :param root_ca: File path to root certificate authority, in PEM format.
-    :param thing_name: The name assigned to your IoT Thing.
     :param mqtt_session: Existing mqtt session.
     :param is_done_event: Threading Event to stop execution.
     :return: None
@@ -132,7 +133,6 @@ def publish_device_logs(thing_name, endpoint=None, cert=None, key=None, root_ca=
     print("Subscribed with {}".format(str(subscribe_result['qos'])))
 
     # simulate logs publishing to the thing's topic log every pub_delay secs
-    pub_delay = 15
     print("Sending logs every {} seconds".format(pub_delay))
 
     with open('log.json', 'r') as f:
